@@ -14,13 +14,13 @@ def run(cmd, check=True):
 
 def main():
     if len(sys.argv) != 2:
-        print("Usage: git-make-worktrees <n>")
+        print("Usage: git-make-worktrees <n>", file=sys.stderr)
         sys.exit(1)
 
     try:
         n = int(sys.argv[1])
     except ValueError:
-        print("Error: n must be an integer")
+        print("Error: n must be an integer", file=sys.stderr)
         sys.exit(1)
 
     try:
@@ -34,7 +34,11 @@ def main():
     try:
         branch = run(["git", "symbolic-ref", "--short", "HEAD"]).stdout.strip()
     except subprocess.CalledProcessError:
-        branch = run(["git", "rev-parse", "--short", "HEAD"]).stdout.strip()
+        try:
+            branch = run(["git", "rev-parse", "--short", "HEAD"]).stdout.strip()
+        except subprocess.CalledProcessError:
+            print("Error: HEAD does not point to any commit", file=sys.stderr)
+            sys.exit(1)
 
     for i in range(2, n + 2):
         target = root.parent / f"{folder}{i}"
@@ -42,8 +46,13 @@ def main():
         print(f"Creating worktree at {target}...")
         result = run(["git", "worktree", "add", str(target), "-b", new_branch], check=False)
         if result.returncode != 0:
-            print("  Branch exists, trying without -b...")
-            run(["git", "worktree", "add", str(target)])
+            if "already exists" in result.stderr:
+                print(f"  Branch '{new_branch}' already exists, trying without -b...")
+                fallback = run(["git", "worktree", "add", str(target), new_branch], check=False)
+                if fallback.returncode != 0:
+                    print(f"  Failed: {fallback.stderr.strip()}", file=sys.stderr)
+            else:
+                print(f"  Failed: {result.stderr.strip()}", file=sys.stderr)
 
 
 if __name__ == "__main__":

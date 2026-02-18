@@ -30,19 +30,17 @@ def main():
 
     for wt in worktrees:
         print(f"Removing worktree: {wt}")
-        cmd = ["git", "worktree", "remove", wt]
-        if force:
-            cmd.insert(3, "--force")
+        cmd = ["git", "worktree", "remove", *(["--force"] if force else []), wt]
         result = run(cmd, check=False)
         if result.returncode != 0:
-            print(f"  Could not remove {wt} (try --force)")
+            print(f"  Could not remove {wt}: {result.stderr.strip()}", file=sys.stderr)
 
     # Delete branches except main and develop
     branch_output = run(["git", "branch"]).stdout
     branches = [
-        b.lstrip("+* ")
+        b[2:]
         for b in branch_output.splitlines()
-        if b.lstrip("+* ") not in ("main", "develop")
+        if b[2:] not in ("main", "develop")
     ]
 
     for branch in branches:
@@ -50,11 +48,13 @@ def main():
         flag = "-D" if force else "-d"
         result = run(["git", "branch", flag, branch], check=False)
         if result.returncode != 0:
-            print(f"  Could not delete {branch} (try --force)")
+            print(f"  Could not delete {branch}: {result.stderr.strip()}", file=sys.stderr)
 
     # Fetch and prune
     print("Running git fetch --prune...")
-    run(["git", "fetch", "--prune"])
+    result = run(["git", "fetch", "--prune"], check=False)
+    if result.returncode != 0:
+        print(f"  Warning: fetch --prune failed: {result.stderr.strip()}", file=sys.stderr)
 
 
 if __name__ == "__main__":
