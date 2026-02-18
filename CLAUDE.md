@@ -14,8 +14,10 @@ A collection of personal git helper utilities for zsh. No build system, no tests
 
 - **git-make-worktrees** — Standalone Python equivalent of `git-make-wt`, runnable via `uvx`. Uses PEP 723 inline script metadata.
 
+- **git-branch-prune** — Standalone Python equivalent of `git-branch-prune` from git-tools.zsh, runnable via `uvx`. Accepts optional `--force` flag.
+
 ## Conventions
 
 - Zsh functions use `git-` prefix naming.
 - Protected branches are `main` and `develop` — never auto-delete these.
-- The Python script targets Python 3.11+ and uses `uvx` as its script runner (shebang: `#!/usr/bin/env -S uvx python3`).
+- Python scripts target Python 3.11+ and use `uvx` as their script runner (shebang: `#!/usr/bin/env -S uvx python3`).
