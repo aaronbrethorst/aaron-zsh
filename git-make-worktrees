@@ -1,0 +1,50 @@
+#!/usr/bin/env -S uvx python3
+# /// script
+# requires-python = ">=3.11"
+# ///
+
+import subprocess
+import sys
+from pathlib import Path
+
+
+def run(cmd, check=True):
+    return subprocess.run(cmd, capture_output=True, text=True, check=check)
+
+
+def main():
+    if len(sys.argv) != 2:
+        print("Usage: git-make-worktrees <n>")
+        sys.exit(1)
+
+    try:
+        n = int(sys.argv[1])
+    except ValueError:
+        print("Error: n must be an integer")
+        sys.exit(1)
+
+    try:
+        root = Path(run(["git", "rev-parse", "--show-toplevel"]).stdout.strip())
+    except subprocess.CalledProcessError:
+        print("Not in a git repo", file=sys.stderr)
+        sys.exit(1)
+
+    folder = root.name
+
+    try:
+        branch = run(["git", "symbolic-ref", "--short", "HEAD"]).stdout.strip()
+    except subprocess.CalledProcessError:
+        branch = run(["git", "rev-parse", "--short", "HEAD"]).stdout.strip()
+
+    for i in range(2, n + 2):
+        target = root.parent / f"{folder}{i}"
+        new_branch = f"{branch}-wt{i}"
+        print(f"Creating worktree at {target}...")
+        result = run(["git", "worktree", "add", str(target), "-b", new_branch], check=False)
+        if result.returncode != 0:
+            print("  Branch exists, trying without -b...")
+            run(["git", "worktree", "add", str(target)])
+
+
+if __name__ == "__main__":
+    main()
