@@ -1,0 +1,61 @@
+#!/usr/bin/env -S uvx python3
+# /// script
+# requires-python = ">=3.11"
+# ///
+
+import subprocess
+import sys
+
+
+def run(cmd, check=True):
+    return subprocess.run(cmd, capture_output=True, text=True, check=check)
+
+
+def main():
+    force = "--force" in sys.argv
+
+    try:
+        run(["git", "rev-parse", "--show-toplevel"])
+    except subprocess.CalledProcessError:
+        print("Not in a git repo", file=sys.stderr)
+        sys.exit(1)
+
+    # Remove worktrees (skip the first entry, which is the main working tree)
+    porcelain = run(["git", "worktree", "list", "--porcelain"]).stdout
+    worktrees = [
+        line.split(" ", 1)[1]
+        for line in porcelain.splitlines()
+        if line.startswith("worktree ")
+    ][1:]
+
+    for wt in worktrees:
+        print(f"Removing worktree: {wt}")
+        cmd = ["git", "worktree", "remove", wt]
+        if force:
+            cmd.insert(3, "--force")
+        result = run(cmd, check=False)
+        if result.returncode != 0:
+            print(f"  Could not remove {wt} (try --force)")
+
+    # Delete branches except main and develop
+    branch_output = run(["git", "branch"]).stdout
+    branches = [
+        b.lstrip("+* ")
+        for b in branch_output.splitlines()
+        if b.lstrip("+* ") not in ("main", "develop")
+    ]
+
+    for branch in branches:
+        print(f"Deleting branch: {branch}")
+        flag = "-D" if force else "-d"
+        result = run(["git", "branch", flag, branch], check=False)
+        if result.returncode != 0:
+            print(f"  Could not delete {branch} (try --force)")
+
+    # Fetch and prune
+    print("Running git fetch --prune...")
+    run(["git", "fetch", "--prune"])
+
+
+if __name__ == "__main__":
+    main()
