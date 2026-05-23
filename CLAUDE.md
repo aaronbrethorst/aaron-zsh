@@ -16,6 +16,8 @@ A collection of personal git helper utilities for zsh. No build system, no tests
 
 - **git-branch-prune** — Standalone Python equivalent of `git-branch-prune` from git-tools.zsh, runnable via `uvx`. Accepts optional `--force` flag.
 
+- **git-commits-on** — Standalone Python script (PEP 723, runnable via `uvx`) that finds commits authored on a given date across every git repo under a folder. Recurses into subfolders but stops descending once it finds a `.git`. Date is `YYYY-MM-DD` or `MM-DD` (current year), leading zeros optional. Matches the author date in the commit's own timezone across all local branches (deduped). Defaults to one line per commit; `--long` adds email, full timestamp, and the complete message. `--author` filters by a case-insensitive substring of `Name <email>`.
+
 ## Conventions
 
 - Zsh functions use `git-` prefix naming.

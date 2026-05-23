@@ -1,0 +1,160 @@
+#!/usr/bin/env -S uvx python3
+# /// script
+# requires-python = ">=3.11"
+# ///
+
+import argparse
+import datetime
+import os
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+# Field/record separators for parsing `git log` output. Null bytes and the
+# ASCII record separator (0x1e) never appear in commit metadata, so multi-line
+# message bodies survive the split intact. The format string uses git's %xNN
+# placeholders (which it expands to those bytes in its output) because a literal
+# null byte cannot be passed as a subprocess argument.
+FIELD = "\x00"
+RECORD = "\x1e"
+FORMAT = "%x00".join(["%h", "%ad", "%aI", "%an", "%ae", "%s", "%b"]) + "%x1e"
+
+
+def run(cmd, check=True):
+    return subprocess.run(cmd, capture_output=True, text=True, check=check)
+
+
+def bold(s):
+    """Wrap text in ANSI bold, but only when writing to a terminal."""
+    if sys.stdout.isatty():
+        return f"\033[1m{s}\033[0m"
+    return str(s)
+
+
+def parse_date(s):
+    """Parse 'YYYY-MM-DD' or 'MM-DD' (current year), leading zeros optional."""
+    parts = s.split("-")
+    if len(parts) == 2:
+        year = datetime.date.today().year
+        month, day = parts
+    elif len(parts) == 3:
+        year, month, day = parts
+    else:
+        raise ValueError(f"expected YYYY-MM-DD or MM-DD, got {s!r}")
+
+    try:
+        return datetime.date(int(year), int(month), int(day))
+    except ValueError as e:
+        raise ValueError(f"invalid date {s!r}: {e}") from e
+
+
+def find_repos(root):
+    """Yield repo roots under `root`, not descending past a discovered .git."""
+    repos = []
+    for dirpath, dirnames, filenames in os.walk(root):
+        # .git is a directory in a normal clone, a file in a linked worktree.
+        if ".git" in dirnames or ".git" in filenames:
+            repos.append(Path(dirpath))
+            dirnames[:] = []  # stop descending into this repo's subfolders
+    return sorted(repos)
+
+
+def commits_on(repo, target, author):
+    """Return commits across all local branches authored on `target`."""
+    # --date=short renders %ad as YYYY-MM-DD in the commit's own timezone,
+    # which is exactly the calendar date we compare against.
+    result = run(
+        ["git", "-C", str(repo), "log", "--branches", "--date=short",
+         f"--pretty=format:{FORMAT}"],
+        check=False,
+    )
+    if result.returncode != 0:
+        # A repo with no commits yet is expected during a scan, not an error.
+        if "does not have any commits yet" not in result.stderr:
+            print(f"  Warning: could not read {repo}: {result.stderr.strip()}",
+                  file=sys.stderr)
+        return []
+
+    target_str = target.isoformat()
+    commits = []
+    for record in result.stdout.split(RECORD):
+        record = record.lstrip("\n")  # git joins records with a newline
+        if not record:
+            continue
+        fields = record.split(FIELD)
+        if len(fields) < 7:
+            continue
+        short, ad, aiso, name, email, subject, body = fields[:7]
+        if ad != target_str:
+            continue
+        if author and author.lower() not in f"{name} <{email}>".lower():
+            continue
+        commits.append({
+            "short": short, "iso": aiso, "name": name,
+            "email": email, "subject": subject, "body": body,
+        })
+    return commits
+
+
+def print_commit(c, long):
+    if not long:
+        print(f"{c['short']} {c['name']} {c['subject']}")
+        return
+
+    print(f"{c['short']} {c['name']} <{c['email']}>  {c['iso']}")
+    body = c["body"].rstrip()
+    message = f"{c['subject']}\n\n{body}" if body else c["subject"]
+    for line in message.splitlines():
+        print(f"    {line}")
+    print()
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Find commits authored on a given date across every git "
+                    "repo under a folder."
+    )
+    parser.add_argument("date", help="YYYY-MM-DD or MM-DD (current year); "
+                                     "leading zeros optional")
+    parser.add_argument("path", nargs="?", default=".",
+                        help="folder to scan recursively (default: .)")
+    parser.add_argument("--author",
+                        help="case-insensitive substring filter on 'Name <email>'")
+    parser.add_argument("-l", "--long", action="store_true",
+                        help="show full message, email, and timestamp per commit")
+    args = parser.parse_args()
+
+    try:
+        target = parse_date(args.date)
+    except ValueError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(2)
+
+    root = Path(args.path).expanduser().resolve()
+    if not root.is_dir():
+        print(f"Error: {root} is not a directory", file=sys.stderr)
+        sys.exit(1)
+
+    target_str = target.isoformat()
+    divider = "─" * shutil.get_terminal_size(fallback=(80, 24)).columns
+    first = True
+    for repo in find_repos(root):
+        commits = commits_on(repo, target, args.author)
+        if not commits:
+            continue
+        if not first:
+            print(divider)
+            print()
+        first = False
+        print(bold(repo))
+        print()
+        print(bold(target_str))
+        print()
+        for c in commits:
+            print_commit(c, args.long)
+        print()
+
+
+if __name__ == "__main__":
+    main()

@@ -27,6 +27,29 @@ git-branch-prune
 git-branch-prune --force
 ```
 
+### git-commits-on
+
+Finds every commit authored on a given date across all the git repos under a folder. It recurses through subfolders but stops descending the moment it hits a `.git`, so pointing it at `~/repos` scans `~/repos` and `~/repos/onebusaway` without diving into the innards of each individual repo.
+
+Dates are `YYYY-MM-DD` or `MM-DD` (current year), and leading zeros are optional — `5-1`, `05-01`, and `2026-05-01` all work. A commit matches if its author date, in the commit's own timezone, falls on that day. All local branches are scanned and deduped.
+
+```
+git-commits-on 5-1 ~/repos
+git-commits-on 2026-05-01 ~/repos --author aaron --long
+```
+
+The default output is one line per commit (`{sha} {author} {subject}`), grouped by repo:
+
+```
+/Users/aaron/repos/aaron-zsh
+
+2026-05-01
+
+a1b2c3d Aaron Brethorst Fix date parsing
+```
+
+Pass `--long` for the full message, author email, and timestamp; pass `--author <substr>` to filter by a case-insensitive substring of `Name <email>`. The `path` argument defaults to the current directory.
+
 ### git-tools.zsh
 
 Zsh shell functions (`git-make-wt`, `git-branch-prune`) that do the same thing as the standalone scripts. Source this file in your `.zshrc` if you prefer shell functions over standalone commands.
@@ -37,5 +60,5 @@ The Python scripts use [uvx](https://docs.astral.sh/uv/concepts/tools/) as their
 
 ```
 # Copy or symlink the scripts somewhere on your PATH
-cp git-make-worktrees git-branch-prune ~/.local/bin/
+cp git-make-worktrees git-branch-prune git-commits-on ~/.local/bin/
 ```
